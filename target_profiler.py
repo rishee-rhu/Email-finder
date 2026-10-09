@@ -35,7 +35,7 @@ Return a STRICT JSON object (no markdown, no commentary) with these keys:
     "1-3 types of brands or named brands to use as social proof / FOMO references"
   ],
   "search_queries": [
-    "8-12 Google search queries that surface the OFFICIAL WEBSITES of the ACTUAL TARGET CLIENTS above — the businesses that would BUY this service (their own brand site / online store). NOT agencies, NOT other service providers, NOT SaaS/software tools, NOT directories or listicles. End EVERY query with these negative operators verbatim: -agency -\"marketing agency\" -services -consulting -saas -software -hiring -jobs -site:indiamart.com -site:justdial.com -site:linkedin.com -site:facebook.com -site:amazon.in -site:rocketreach.co -site:zoominfo.com -wikipedia. Include words like \"official\", \"shop\", \"store\", \"about us\", the specific product category, and the region. Vary the angle (category terms, 'buy <product> online', 'shop now', 'powered by Shopify')."
+    "8-12 Google search queries that surface the OFFICIAL WEBSITES of the ACTUAL TARGET CLIENTS above — the businesses that would BUY this service (their own brand site / online store). NOT agencies, NOT other service providers, NOT SaaS/software tools, NOT directories or listicles. Keep each query SHORT: 4-8 plain words, no minus operators (they are added automatically). Include words like \"official\", \"shop\", \"store\", \"about us\", the specific product category, and the region. Vary the angle (category terms, 'buy <product> online', 'shop now', 'powered by Shopify')."
   ],
   "audit": {{
     "auditable_online": true,
@@ -95,6 +95,16 @@ def _coerce_json(text):
     return json.loads(text)
 
 
+# A few exclusions only: Google returns nothing once a query passes ~32 words.
+QUERY_SUFFIX = "-agency -jobs -site:linkedin.com -site:amazon.in -site:indiamart.com"
+
+
+def _clean_query(q):
+    """Strip model-added operators, cap length, append the short exclusion list."""
+    words = [w for w in str(q).split() if not w.startswith("-")][:10]
+    return (" ".join(words) + " " + QUERY_SUFFIX) if words else ""
+
+
 def build_profile(dossier, provider="openai", api_key=None):
     """
     Build the ideal-customer profile + search queries from the dossier.
@@ -134,6 +144,8 @@ def build_profile(dossier, provider="openai", api_key=None):
     try:
         raw = _call_ai(PROFILE_PROMPT.format(dossier=dossier), provider, api_key)
         data = _coerce_json(raw)
+        data["search_queries"] = [_clean_query(q) for q in data.get("search_queries") or []
+                                  if _clean_query(q)]
         # minimal validation
         if not data.get("search_queries"):
             data["search_queries"] = fallback["search_queries"]

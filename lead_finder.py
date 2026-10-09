@@ -50,11 +50,18 @@ SKIP_DOMAINS = [
     "pdfcoffee", "scribd", "slideshare", "studocu", "coursehero", "academia",
     "researchgate", "yumpu", "calameo", "fliphtml5", "dokumen", "vdocument",
     "issuu", "4shared", "docplayer",
+    # ── research / news / health-info / startup databases (not brands) ──
+    "ncbi", "nih.gov", "frontiersin", "sciencedirect", "springer", "harvard",
+    "fda.gov", "who.int", "fao.org", "dealroom", "pitchbook", "d2c.fyi",
+    "lbb.in", "discoveringbrands", "indiatimes", "hindustantimes", "ndtv",
+    "livemint", "thehindu", "news", "1mg.com", "netmeds", "pharmeasy",
+    "ulprospector", "smartbiz", "blogspot", "mypminterview", "dronahq",
+    "exei.ai", "flowqen",
 ]
 
 # Domain suffixes that are never D2C brands
 SKIP_SUFFIXES = (".gov", ".gov.in", ".nic.in", ".edu", ".ac.in", ".edu.in",
-                 ".mil", ".org.in")
+                 ".mil", ".org.in", ".org", ".int")
 
 # Email local-parts that are placeholders, not real addresses
 PLACEHOLDER_LOCALS = (
