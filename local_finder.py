@@ -14,6 +14,7 @@ Pipeline:
      first name when the business is named after a person
 """
 import json
+import re
 from concurrent.futures import ThreadPoolExecutor
 
 import lead_finder as lf
@@ -33,7 +34,8 @@ DEAD_INBOXES = ("accounts", "account", "billing", "hr", "careers", "jobs", "care
                 "privacy", "legal", "abuse", "webmaster", "postmaster")
 # Shared inboxes a small-business owner usually reads, best first
 OWNER_READ_INBOXES = ("founder", "owner", "hello", "hi", "info", "contact", "team",
-                      "care", "support", "enquiry", "enquiries", "sales", "feedback")
+                      "care", "support", "enquiry", "enquiries", "sales", "feedback",
+                      "customer", "connect", "shop", "store", "online", "query", "wecare")
 
 
 def maps_search(apify_key, queries, cities, per_query=20, on_progress=None):
@@ -83,7 +85,7 @@ def filter_small(places, max_reviews=300):
         if (p.get("reviewsCount") or 0) > max_reviews:
             continue
         out.append({
-            "brand_name": (p.get("title") or "").split("|")[0].split(" - ")[0].strip()[:60]
+            "brand_name": re.split(r"\s*[|:–]\s*|\s+-\s*|-\s+", p.get("title") or "")[0].strip()[:60]
                           or d.split(".")[0].title(),
             "website": p.get("website"),
             "domain": d,
