@@ -27,6 +27,19 @@ Then go to **Campaign → Find**, review, and send.
 
 ---
 
+## Deploy on Railway (keeps your data)
+
+1. railway.com → **New Project** → **Deploy from GitHub repo** → pick this repo.
+   `railway.json` already tells Railway how to start the app.
+2. Add a **Volume** to the service, mount path `/data`.
+3. In **Variables**, add `CEE_DB` = `/data/leads.db` so leads, keys and warmup
+   progress survive redeploys.
+4. **Settings → Networking → Generate Domain** to get your public URL.
+
+Every push to `main` redeploys automatically.
+
+---
+
 ## Gmail on the cloud — use an App Password (not OAuth)
 
 The "Connect via Google account-picker" (OAuth) option **only works when running
