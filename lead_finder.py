@@ -118,11 +118,23 @@ def extract_email(text):
     return None
 
 
+# Tracking / build-tool addresses that regex pulls out of page source
+JUNK_EMAIL_DOMAINS = ("sentry", "wixpress", "ingest.", "example.", "domain.com",
+                      "email.com", "yourdomain", "mysite", "godaddy", "shopify.com")
+JUNK_EMAIL_SUFFIXES = (".js", ".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp", ".css")
+
+
 def _is_placeholder_email(email):
-    """Reject placeholder/sample emails like firstname@brand.com."""
+    """Reject placeholder/sample emails like firstname@brand.com, and tracking junk."""
     if not email or "@" not in email:
         return True
-    local = email.split("@")[0].lower()
+    local, _, dom = email.lower().partition("@")
+    if any(j in dom for j in JUNK_EMAIL_DOMAINS) or dom.endswith(JUNK_EMAIL_SUFFIXES):
+        return True
+    if len(local) >= 20 and re.fullmatch(r"[0-9a-f]+", local):   # hash-like sentry keys
+        return True
+    if local in ("john", "jane", "johndoe", "janedoe"):
+        return True
     return any(local == p or local.startswith(p + ".") or local == p.replace(".", "")
                for p in PLACEHOLDER_LOCALS)
 
@@ -141,14 +153,46 @@ def extract_domain(url):
         return ""
     try:
         url = url if url.startswith("http") else f"https://{url}"
-        d = urlparse(url).netloc.lower().lstrip("www.")
+        d = urlparse(url).netloc.lower()
+        if d.startswith("www."):          # lstrip("www.") ate leading w's: wildglow → ildglow
+            d = d[4:]
         return d.split(":")[0]
     except Exception:
         return ""
 
 
+# Brands too big for a new freelancer to win (national chains, unicorns, marketplaces).
+BIG_BRANDS = (
+    "ikea", "tanishq", "bluestone", "caratlane", "giva.co", "kalyanjewellers", "malabargold",
+    "sencogoldanddiamonds", "orra.co", "pepperfry", "urbanladder", "homecentre", "goodearth", "fabindia",
+    "westside", "pantaloons", "lifestylestores", "ajio", "tatacliq", "nnnow", "abfrl",
+    "shoppersstop", "reliance", "zara", "hm.com", "uniqlo", "only.in", "biba", "wforwoman",
+    "manyavar", "sabyasachi", "mamaearth", "wowskinscience", "plumgoodness", "minimalist",
+    "thedermaco", "sugarcosmetics", "lakmeindia", "himalayawellness", "forestessentials",
+    "kamaayurveda", "purplle", "sephora", "nykaa", "boat-lifestyle", "lenskart", "licious",
+    "bigbasket", "zepto", "blinkit", "swiggy", "zomato", "tataconsumer", "itcportal",
+    "dabur", "patanjali", "amul", "haldirams", "bikaji", "healthkart", "muscleblaze",
+    "oziva", "wellbeingnutrition", "beyoung", "thesouledstore", "bewakoof", "snitch",
+    "libas", "jaypore", "chumbak", "fabfurnish", "utsavfashion", "kalkifashion", "azafashions",
+    "houseofindya", "lashkaraa", "streetstylestore",
+)
+CHAIN_SUBDOMAINS = ("stores.", "showrooms.", "luxury.", "global.", "trends.", "locations.")
+
+
+def is_big_brand(domain):
+    """Dotted entries match as substrings; plain names must equal a domain label,
+    so "amul" blocks amul.com but not samulti.in."""
+    d = (domain or "").lower()
+    if d.startswith(CHAIN_SUBDOMAINS):
+        return True
+    labels = d.split(".")
+    return any((b in d) if "." in b else (b in labels) for b in BIG_BRANDS)
+
+
 def is_brand_domain(domain):
     if not domain or len(domain) < 5 or "." not in domain:
+        return False
+    if is_big_brand(domain):
         return False
     if any(domain.endswith(suf) for suf in SKIP_SUFFIXES):
         return False
@@ -568,7 +612,7 @@ def enrich_emails_via_apify(apify_key, websites, on_progress=None):
     if not targets:
         return {}
     if on_progress:
-        on_progress(f"Scraping {len(targets)} brand sites for founder emails…", 0)
+        on_progress(f"Scraping {len(targets)} websites for published emails…", 0)
 
     def work(item):
         d, base = item

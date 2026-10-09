@@ -20,6 +20,7 @@ import key_tester
 import target_profiler
 import email_verifier
 import spam_check
+import local_finder
 import ui
 
 db.init()
@@ -311,10 +312,10 @@ if page == "Campaign":
     _a = [d for d in _d if d["_approved"] and not d["_skip"]]
     hc1, hc2 = st.columns([3, 1])
     with hc1:
-        ui.page_header("New campaign", "Find founders, write the sequence, review, send.",
+        ui.page_header("New campaign", "Find small businesses, write the sequence, review, send.",
                        eyebrow="Outreach")
     _active = 4 if _a else (3 if _d else (2 if _v else 1))
-    ui.stepper([("Find", f"{len(_v)} emails" if _v else "Founder emails", bool(_v)),
+    ui.stepper([("Find", f"{len(_v)} leads" if _v else "Small businesses", bool(_v)),
                 ("Write", f"{len(_d)} sequences" if _d else "AI drafts", bool(_d)),
                 ("Review", f"{len(_a)} approved" if _d else "Edit & approve", bool(_a)),
                 ("Send", f"limit {db.warmup_daily_limit()}/day", False)], _active)
@@ -345,12 +346,36 @@ if page == "Campaign":
         return prof
 
     with st.container(border=True):
-        ui.step_head(1, "Find founder emails",
-                     "Reads your dossier, works out who to target, and finds verified "
-                     "founder/CEO emails. One click.", done=bool(_v))
-        target_n = st.number_input("How many founder emails to find", min_value=1,
+        ui.step_head(1, "Find leads",
+                     "Reads your dossier, works out who to target, and finds small "
+                     "businesses with a real email.", done=bool(_v))
+        SRC_MAPS, SRC_WEB, SRC_BOTH = ("Local small businesses (Google Maps)",
+                                       "Online brands (web search, founders only)", "Both")
+        source = st.radio("Where to look", [SRC_MAPS, SRC_WEB, SRC_BOTH], horizontal=True,
+                          help="Maps finds owner-run local businesses a new freelancer can "
+                               "actually win. Web search finds online brands and their founders.")
+        target_n = st.number_input("How many leads to find", min_value=1,
                                    max_value=500, value=20, step=5)
         target_n = int(target_n)
+
+        use_maps = source in (SRC_MAPS, SRC_BOTH)
+        if use_maps:
+            _cached = st.session_state.get("camp_profile") or {}
+            mc1, mc2, mc3 = st.columns([3, 1, 1])
+            cities_txt = mc1.text_input(
+                "Cities (separate with ;)",
+                value="; ".join(_cached.get("cities") or ["Mumbai, India"]),
+                help="Your own city first. Each city is one Google Maps run.")
+            max_reviews = mc2.number_input(
+                "Max Google reviews", min_value=10, max_value=5000, value=300, step=50,
+                help="Lower = smaller businesses. Big chains have thousands.")
+            per_query = mc3.number_input("Places per search", min_value=5, max_value=100,
+                                         value=20, step=5)
+            cities = [c.strip() for c in cities_txt.split(";") if c.strip()]
+            n_terms = len(_cached.get("maps_queries") or []) or 5
+            est = len(cities) * n_terms * int(per_query) * local_finder.COST_PER_PLACE
+            st.caption(f"Google Maps cost: about ${est:.2f} in Apify credit "
+                       f"({len(cities)} cities × {n_terms} searches × {int(per_query)} places).")
 
         if st.button(f"Find {target_n} emails", type="primary"):
             if not apify_key:
@@ -375,20 +400,34 @@ if page == "Campaign":
 
                 # Over-fetch so that AFTER verification we still have target_n good ones
                 oversample = int(target_n * 1.6) + 5
-                with st.spinner("Finding companies & founders, verifying emails via Apify…"):
-                    # Generic discovery: use THIS student's dossier queries (works for any
-                    # field), then keep the strict founder-validation that ensures accuracy.
-                    brand_candidates = lead_finder.find_domains_via_google(
-                        apify_key, profile.get("search_queries", []),
-                        max_domains=min(oversample * 6, 150))
-                    runlog.append(f"Discovery: {len(brand_candidates)} company domains from search.")
-                    found = lead_finder.find_founder_leads(
-                        apify_key=apify_key,
-                        candidates=brand_candidates,
-                        target=oversample,
-                        market=market,
-                        on_progress=on_prog,
-                    )
+                found = []
+                with st.spinner("Finding businesses and emails…"):
+                    if use_maps:
+                        if not profile.get("maps_queries"):      # profile built by an older version
+                            db.put("icp_json", "")
+                            st.session_state.pop("camp_profile", None)
+                            profile = _get_profile()
+                        found += local_finder.find_local_leads(
+                            apify_key, ai_key, profile, cities or ["Mumbai, India"],
+                            target=oversample, per_query=int(per_query),
+                            max_reviews=int(max_reviews), market=market,
+                            on_progress=on_prog)
+                    if source in (SRC_WEB, SRC_BOTH):
+                        # Web discovery from the dossier's queries, then strict founder validation
+                        brand_candidates = lead_finder.find_domains_via_google(
+                            apify_key, profile.get("search_queries", []),
+                            max_domains=min(oversample * 6, 150))
+                        runlog.append(f"Discovery: {len(brand_candidates)} company domains from search.")
+                        found += lead_finder.find_founder_leads(
+                            apify_key=apify_key,
+                            candidates=brand_candidates,
+                            target=oversample,
+                            market=market,
+                            on_progress=on_prog,
+                        )
+                    _seen = set()
+                    found = [l for l in found
+                             if l["email"] not in _seen and not _seen.add(l["email"])]
                 st.session_state.camp_runlog = runlog
 
                 # Verify internally, automatically — only genuine emails move forward
@@ -417,7 +456,7 @@ if page == "Campaign":
                                f"(you asked for {target_n}; checked {len(found)} brands). "
                                "Run Find again or raise the count to gather more.")
                 else:
-                    st.error("No founder emails found this run.")
+                    st.error("No leads found this run.")
                     with st.expander("Run details (what happened at each stage)", expanded=True):
                         for line in runlog:
                             st.text(line)
@@ -437,18 +476,24 @@ if page == "Campaign":
 
         verified = st.session_state.get("camp_verified", [])
         if verified:
-            n_real = sum(1 for l in verified if l.get("email_quality") == "founder_real")
-            st.caption(f"{len(verified)} founder/CEO emails ready · {n_real} published (real), "
-                       f"{len(verified) - n_real} verified-guess. Brands with no findable "
-                       "founder email were skipped — no business addresses included.")
+            QUALITY = {"founder_real": "Founder, published", "founder_verified": "Founder, verified guess",
+                       "owner": "Owner, published", "owner_gmail": "Owner Gmail, published",
+                       "business_inbox": "Business inbox, published"}
+            n_pub = sum(1 for l in verified if l.get("email_quality") != "founder_verified")
+            st.caption(f"{len(verified)} leads ready · {n_pub} emails published on their own "
+                       f"site, {len(verified) - n_pub} verified guesses.")
             st.dataframe(pd.DataFrame([{
-                "Brand": l["brand_name"],
-                "Founder": l.get("contact_name") or "—",
-                "Role": l.get("contact_role") or "—",
+                "Business": l["brand_name"],
+                "Contact": l.get("contact_name") or "—",
                 "Email": l["email"],
-                "Source": "Published" if l.get("email_quality") == "founder_real" else "Verified guess",
-                "Category": l.get("category"),
-            } for l in verified]), use_container_width=True, hide_index=True)
+                "Email type": QUALITY.get(l.get("email_quality"), l.get("email_quality", "")),
+                "Reviews": l.get("reviews", "—"),
+                "City": (l.get("city") or "—").split(",")[0],
+                "Phone": l.get("phone") or "—",
+                "Why it fits": l.get("fit_reason") or "—",
+                "Website": l.get("website", ""),
+            } for l in verified]), use_container_width=True, hide_index=True,
+                column_config={"Website": st.column_config.LinkColumn("Website")})
 
             # show what got dropped, for transparency
             results = st.session_state.get("camp_verify_results", {})

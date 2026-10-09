@@ -37,6 +37,10 @@ Return a STRICT JSON object (no markdown, no commentary) with these keys:
   "search_queries": [
     "8-12 Google search queries that surface the OFFICIAL WEBSITES of the ACTUAL TARGET CLIENTS above — the businesses that would BUY this service (their own brand site / online store). NOT agencies, NOT other service providers, NOT SaaS/software tools, NOT directories or listicles. Keep each query SHORT: 4-8 plain words, no minus operators (they are added automatically). Include words like \"official\", \"shop\", \"store\", \"about us\", the specific product category, and the region. Vary the angle (category terms, 'buy <product> online', 'shop now', 'powered by Shopify')."
   ],
+  "maps_queries": [
+    "4-6 short Google MAPS search terms (2-3 words each) that list small LOCAL businesses of the target type, e.g. \"skincare brand\", \"jewellery designer\", \"home decor store\", \"organic food brand\". No city names, no operators."
+  ],
+  "cities": ["2-4 cities to search, the freelancer's own city first, written like \"Mumbai, India\""],
   "audit": {{
     "auditable_online": true,
     "audit_focus": "what publicly-visible thing to check on the prospect (e.g. their Instagram/social presence, website content quality, blog/SEO). Phrase as the service area.",
@@ -56,14 +60,14 @@ Rules:
 - Output ONLY the JSON object."""
 
 
-def _call_ai(prompt, provider, api_key):
+def _call_ai(prompt, provider, api_key, max_tokens=900):
     if provider == "openai":
         from openai import OpenAI
         r = OpenAI(api_key=api_key).chat.completions.create(
             model="gpt-4o-mini",
             messages=[{"role": "user", "content": prompt}],
             temperature=0.3,
-            max_tokens=900,
+            max_tokens=max_tokens,
             response_format={"type": "json_object"},
         )
         return r.choices[0].message.content.strip()
@@ -71,7 +75,7 @@ def _call_ai(prompt, provider, api_key):
         import anthropic
         r = anthropic.Anthropic(api_key=api_key).messages.create(
             model="claude-haiku-4-5-20251001",
-            max_tokens=900,
+            max_tokens=max_tokens,
             messages=[{"role": "user", "content": prompt}],
         )
         return r.content[0].text.strip()
@@ -135,6 +139,9 @@ def build_profile(dossier, provider="openai", api_key=None):
             "audit_focus": "their website content and social media presence",
             "reason": "marketing/content presence is publicly visible",
         },
+        "maps_queries": ["skincare brand", "fashion boutique", "jewellery designer",
+                         "home decor store", "organic food brand"],
+        "cities": ["Mumbai, India"],
         "_fallback": True,
     }
 
@@ -142,7 +149,7 @@ def build_profile(dossier, provider="openai", api_key=None):
         return fallback
 
     try:
-        raw = _call_ai(PROFILE_PROMPT.format(dossier=dossier), provider, api_key)
+        raw = _call_ai(PROFILE_PROMPT.format(dossier=dossier), provider, api_key, max_tokens=1500)
         data = _coerce_json(raw)
         data["search_queries"] = [_clean_query(q) for q in data.get("search_queries") or []
                                   if _clean_query(q)]
@@ -153,6 +160,12 @@ def build_profile(dossier, provider="openai", api_key=None):
         data.setdefault("pain_points", fallback["pain_points"])
         data.setdefault("competitor_examples", fallback["competitor_examples"])
         data.setdefault("audit", fallback["audit"])
+        if not data.get("maps_queries"):
+            data["maps_queries"] = [f"{i} brand" for i in
+                                    data["ideal_customer"].get("industries", [])[:5]]
+        data["maps_queries"] = [q.strip() for q in data["maps_queries"] if q.strip()][:6]
+        if not data.get("cities"):
+            data["cities"] = [data["ideal_customer"].get("region") or "India"]
         data["_fallback"] = False
         return data
     except Exception as e:
