@@ -1,0 +1,20 @@
+# Cold Email Engine — UI theme + safe defaults (cloud-ready)
+[theme]
+primaryColor             = "#2874A6"
+backgroundColor          = "#FFFFFF"
+secondaryBackgroundColor = "#F4F7FA"
+textColor                = "#1B2631"
+font                     = "sans serif"
+
+[server]
+headless      = true
+maxUploadSize = 10
+# NOTE: do NOT set server.address here — Streamlit Cloud must bind all interfaces.
+# For local-only security, run with:  streamlit run app.py --server.address localhost
+
+[client]
+# Hide the Deploy button + developer menu — clean view for students
+toolbarMode = "viewer"
+
+[browser]
+gatherUsageStats = false

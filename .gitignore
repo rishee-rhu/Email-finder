@@ -1,0 +1,10 @@
+leads.db
+*.db
+__pycache__/
+*.pyc
+.env
+.streamlit/secrets.toml
+# Gmail secrets — never commit these
+gmail_token.json
+gmail_credentials.json
+daily_log.txt
