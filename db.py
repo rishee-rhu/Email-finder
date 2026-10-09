@@ -1,8 +1,10 @@
+import os
 import sqlite3
 import json
 from datetime import datetime, timedelta
 
-DB = "leads.db"
+# CEE_DB lets preview_ui.bat point the app at a throwaway demo database.
+DB = os.environ.get("CEE_DB", "leads.db")
 
 def init():
     conn = sqlite3.connect(DB)

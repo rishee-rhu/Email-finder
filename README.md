@@ -66,7 +66,24 @@ and you can use the Gmail OAuth option if you add `gmail_credentials.json`.
 
 ---
 
+## Work on the look (UI preview)
+
+Double-click **`preview_ui.bat`** (Windows). It opens http://localhost:8502 filled with
+fake leads, drafts and replies from `demo.db`, so nothing real is sent and your
+`leads.db` is untouched.
+
+- **Colours, fonts, spacing, cards:** edit `ui.py` (colour tokens at the top of `CSS`).
+  Also change `primaryColor` in `.streamlit/config.toml` so buttons match.
+- **Layout and wording:** edit `app.py`.
+- Save the file and the browser reloads on its own.
+
+When you're happy, upload the changed files to GitHub and Streamlit Cloud redeploys.
+
+---
+
 ## Files
+- `ui.py` — all styling + small UI helpers (header, KPI cards, stepper)
+- `demo_data.py` / `preview_ui.bat` — fake data + launcher for UI work
 - `app.py` — the Streamlit UI (main file)
 - `target_profiler.py` — reads dossier → who to target + search queries
 - `lead_finder.py` — discovery + direct page scraping + founder pipeline
