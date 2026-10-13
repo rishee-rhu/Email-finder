@@ -377,7 +377,7 @@ if page == "Campaign":
             st.caption(f"Google Maps cost: about ${est:.2f} in Apify credit "
                        f"({len(cities)} cities × {n_terms} searches × {int(per_query)} places).")
 
-        if st.button(f"Find {target_n} emails", type="primary"):
+        if st.button(f"Find {target_n} leads", type="primary"):
             if not apify_key:
                 st.error("Apify key missing — add it in Settings.")
             else:
